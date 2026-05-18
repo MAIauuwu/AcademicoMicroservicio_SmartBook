@@ -1,0 +1,16 @@
+package org.bubbleplat.academico.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class AsignaturaResponse {
+
+    private Integer id;
+    private String nombre;
+    private String descripcion;
+    private Integer creditos;
+}
