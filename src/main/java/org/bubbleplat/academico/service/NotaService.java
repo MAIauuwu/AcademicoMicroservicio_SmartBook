@@ -6,10 +6,12 @@ import org.bubbleplat.academico.dto.NotaResponse;
 import org.bubbleplat.academico.entity.Nota;
 import org.bubbleplat.academico.repository.NotaRepository;
 import org.bubbleplat.academico.repository.EvaluacionRepository;
+import org.bubbleplat.academico.repository.EstudianteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +19,7 @@ public class NotaService {
 
     private final NotaRepository notaRepository;
     private final EvaluacionRepository evaluacionRepository;
+    private final EstudianteRepository estudianteRepository;
 
     @Transactional(readOnly = true)
     public List<NotaResponse> findAll() {
@@ -81,9 +84,15 @@ public class NotaService {
     }
 
     private NotaResponse toResponse(Nota nota) {
+        String estudianteNombre = Optional.ofNullable(nota.getEstudianteId())
+                .flatMap(estudianteRepository::findById)
+                .map(e -> e.getNombre())
+                .orElse(null);
+        
         return new NotaResponse(
                 nota.getId(),
                 nota.getEstudianteId(),
+                estudianteNombre,
                 nota.getValor(),
                 nota.getEvaluacion().getId(),
                 nota.getEvaluacion().getNombre()

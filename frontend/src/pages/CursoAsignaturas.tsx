@@ -1,158 +1,246 @@
-import { useState, useEffect } from 'react';
-import { cursoAsignaturaService, cursoService, asignaturaService } from '../services/api';
-import type { CursoAsignatura, Curso, Asignatura } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Pencil, Trash2, Plus, Link2 } from 'lucide-react';
+import { cursoAsignaturaService, cursoService, asignaturaService, docenteService } from '../services';
+import type { CursoAsignatura, Curso, Asignatura, Docente } from '../types';
+import Modal from '../components/Modal';
+import Input from '../components/Input';
+import Select from '../components/Select';
+import Button from '../components/Button';
+import SearchBar from '../components/SearchBar';
+import Pagination from '../components/Pagination';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { useToast } from '../components/ToastProvider';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
-const emptyCursoAsignatura: CursoAsignatura = { cursoId: 0, asignaturaId: 0, docenteId: 0, semestre: '' };
+const cursoAsignaturaSchema = z.object({
+  cursoId: z.number().min(1, 'Selecciona un curso'),
+  asignaturaId: z.number().min(1, 'Selecciona una asignatura'),
+  docenteId: z.number().min(1, 'Selecciona un docente'),
+  semestre: z.string().min(1, 'El semestre es requerido'),
+});
+
+type CursoAsignaturaFormData = z.infer<typeof cursoAsignaturaSchema>;
 
 export default function CursoAsignaturas() {
-  const [items, setItems] = useState<CursoAsignatura[]>([]);
-  const [form, setForm] = useState<CursoAsignatura>(emptyCursoAsignatura);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
+  const [cursoAsignaturas, setCursoAsignaturas] = useState<CursoAsignatura[]>([]);
+  const [filteredCursoAsignaturas, setFilteredCursoAsignaturas] = useState<CursoAsignatura[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [asignaturas, setAsignaturas] = useState<Asignatura[]>([]);
+  const [docentes, setDocentes] = useState<Docente[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCursoAsignatura, setEditingCursoAsignatura] = useState<CursoAsignatura | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm<CursoAsignaturaFormData>();
 
   useEffect(() => {
-    loadData();
+    loadAllData();
   }, []);
 
-  const loadData = async () => {
+  useEffect(() => {
+    const filtered = cursoAsignaturas.filter(ca =>
+      ca.cursoNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ca.asignaturaNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ca.docenteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ca.semestre.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredCursoAsignaturas(filtered);
+    setCurrentPage(1);
+  }, [searchTerm, cursoAsignaturas]);
+
+  const loadAllData = async () => {
     try {
-      const [itemsRes, cursosRes, asignaturasRes] = await Promise.all([
+      setLoading(true);
+      const [caResponse, cResponse, aResponse, dResponse] = await Promise.all([
         cursoAsignaturaService.getAll(),
         cursoService.getAll(),
         asignaturaService.getAll(),
+        docenteService.getAll(),
       ]);
-      setItems(itemsRes.data);
-      setCursos(cursosRes.data);
-      setAsignaturas(asignaturasRes.data);
+      setCursoAsignaturas(caResponse.data);
+      setFilteredCursoAsignaturas(caResponse.data);
+      setCursos(cResponse.data);
+      setAsignaturas(aResponse.data);
+      setDocentes(dResponse.data);
     } catch (error) {
-      console.error('Error al cargar datos:', error);
+      showToast('error', 'Error al cargar datos');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: CursoAsignaturaFormData) => {
     try {
-      if (editing) {
-        await cursoAsignaturaService.update(editing, form);
+      if (editingCursoAsignatura?.id) {
+        await cursoAsignaturaService.update(editingCursoAsignatura.id, { ...data, id: editingCursoAsignatura.id });
+        showToast('success', 'Relación actualizada correctamente');
       } else {
-        await cursoAsignaturaService.create(form);
+        await cursoAsignaturaService.create(data);
+        showToast('success', 'Relación creada correctamente');
       }
-      setForm(emptyCursoAsignatura);
-      setEditing(null);
-      setShowModal(false);
-      loadData();
+      setIsModalOpen(false);
+      reset();
+      setEditingCursoAsignatura(null);
+      loadAllData();
     } catch (error) {
-      console.error('Error al guardar:', error);
+      showToast('error', 'Error al guardar relación');
     }
   };
 
-  const handleEdit = (item: CursoAsignatura) => {
-    setForm(item);
-    setEditing(item.id!);
-    setShowModal(true);
+  const handleEdit = (cursoAsignatura: CursoAsignatura) => {
+    setEditingCursoAsignatura(cursoAsignatura);
+    setValue('cursoId', cursoAsignatura.cursoId);
+    setValue('asignaturaId', cursoAsignatura.asignaturaId);
+    setValue('docenteId', cursoAsignatura.docenteId);
+    setValue('semestre', cursoAsignatura.semestre);
+    setIsModalOpen(true);
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('¿Estás seguro de eliminar esta relación?')) {
+    if (window.confirm('¿Estás seguro de eliminar esta relación?')) {
       try {
         await cursoAsignaturaService.delete(id);
-        loadData();
+        showToast('success', 'Relación eliminada correctamente');
+        loadAllData();
       } catch (error) {
-        console.error('Error al eliminar:', error);
+        showToast('error', 'Error al eliminar relación');
       }
     }
   };
 
-  const handleNew = () => {
-    setForm(emptyCursoAsignatura);
-    setEditing(null);
-    setShowModal(true);
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingCursoAsignatura(null);
+    reset();
   };
 
-  if (loading) return <div className="text-center py-8">Cargando...</div>;
+  const paginatedCursoAsignaturas = filteredCursoAsignaturas.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  const totalPages = Math.ceil(filteredCursoAsignaturas.length / itemsPerPage) || 1;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner size={48} />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Curso-Asignatura</h1>
-        <button onClick={handleNew} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-          + Nueva Relación
-        </button>
+    <div className="p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <Link2 size={32} className="text-purple-600" />
+        <h1 className="text-3xl font-bold text-gray-800">Gestión de Cursos-Asignaturas</h1>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Curso</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asignatura</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Docente ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Semestre</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {items.map((item) => (
-              <tr key={item.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.cursoNombre}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.asignaturaNombre}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.docenteId}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.semestre}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button onClick={() => handleEdit(item)} className="text-indigo-600 hover:text-indigo-900 mr-4">Editar</button>
-                  <button onClick={() => handleDelete(item.id!)} className="text-red-600 hover:text-red-900">Eliminar</button>
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr><td colSpan={6} className="px-6 py-4 text-center text-gray-500">No hay relaciones registradas</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">{editing ? 'Editar' : 'Nueva'} Relación</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Curso</label>
-                <select required value={form.cursoId} onChange={(e) => setForm({ ...form, cursoId: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
-                  <option value={0}>Seleccionar curso</option>
-                  {cursos.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Asignatura</label>
-                <select required value={form.asignaturaId} onChange={(e) => setForm({ ...form, asignaturaId: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
-                  <option value={0}>Seleccionar asignatura</option>
-                  {asignaturas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Docente ID</label>
-                <input type="number" required value={form.docenteId} onChange={(e) => setForm({ ...form, docenteId: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
-                <input type="text" required value={form.semestre} onChange={(e) => setForm({ ...form, semestre: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Ej: 2026-1" />
-              </div>
-              <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Cancelar</button>
-                <button type="submit" className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">{editing ? 'Actualizar' : 'Crear'}</button>
-              </div>
-            </form>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex-1">
+            <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Buscar por curso, asignatura, docente o semestre..." />
           </div>
+          <Button onClick={() => { reset(); setEditingCursoAsignatura(null); setIsModalOpen(true); }} icon={<Plus size={20} />}>
+            Nueva Relación
+          </Button>
         </div>
-      )}
+
+        {filteredCursoAsignaturas.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            No se encontraron relaciones
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Curso</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asignatura</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Docente</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semestre</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paginatedCursoAsignaturas.map((ca) => (
+                    <tr key={ca.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ca.id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ca.cursoNombre || ca.cursoId}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ca.asignaturaNombre || ca.asignaturaId}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ca.docenteNombre || ca.docenteId}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ca.semestre}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleEdit(ca)}
+                          className="text-indigo-600 hover:text-indigo-900 mr-3"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ca.id!)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      <Modal isOpen={isModalOpen} onClose={closeModal} title={editingCursoAsignatura ? 'Editar Relación' : 'Nueva Relación'}>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <Select
+            label="Curso"
+            {...register('cursoId', { valueAsNumber: true })}
+            error={errors.cursoId?.message}
+            options={cursos.map(c => ({ value: c.id!, label: c.nombre }))}
+          />
+          <Select
+            label="Asignatura"
+            {...register('asignaturaId', { valueAsNumber: true })}
+            error={errors.asignaturaId?.message}
+            options={asignaturas.map(a => ({ value: a.id!, label: `${a.nombre} (${a.creditos} créditos)` }))}
+          />
+          <Select
+            label="Docente"
+            {...register('docenteId', { valueAsNumber: true })}
+            error={errors.docenteId?.message}
+            options={docentes.map(d => ({ value: d.id!, label: d.nombre }))}
+          />
+          <Input
+            label="Semestre"
+            {...register('semestre')}
+            error={errors.semestre?.message}
+            placeholder="1"
+          />
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="secondary" onClick={closeModal}>Cancelar</Button>
+            <Button type="submit">{editingCursoAsignatura ? 'Actualizar' : 'Crear'}</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -1,3 +1,19 @@
+export interface Estudiante {
+  id?: number;
+  nombre: string;
+  email: string;
+  matricula: string;
+  telefono?: string;
+}
+
+export interface Docente {
+  id?: number;
+  nombre: string;
+  email: string;
+  especialidad?: string;
+  telefono?: string;
+}
+
 export interface Curso {
   id?: number;
   nombre: string;
@@ -20,6 +36,7 @@ export interface CursoAsignatura {
   asignaturaId: number;
   asignaturaNombre?: string;
   docenteId: number;
+  docenteNombre?: string;
   semestre: string;
 }
 
@@ -36,6 +53,7 @@ export interface Evaluacion {
 export interface Nota {
   id?: number;
   estudianteId: number;
+  estudianteNombre?: string;
   valor: number;
   evaluacionId: number;
   evaluacionNombre?: string;

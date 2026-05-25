@@ -11,6 +11,7 @@ public class NotaResponse {
 
     private Integer id;
     private Integer estudianteId;
+    private String estudianteNombre;
     private Double valor;
     private Integer evaluacionId;
     private String evaluacionNombre;

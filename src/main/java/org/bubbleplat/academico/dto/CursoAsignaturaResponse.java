@@ -15,5 +15,6 @@ public class CursoAsignaturaResponse {
     private Integer asignaturaId;
     private String asignaturaNombre;
     private Integer docenteId;
+    private String docenteNombre;
     private String semestre;
 }

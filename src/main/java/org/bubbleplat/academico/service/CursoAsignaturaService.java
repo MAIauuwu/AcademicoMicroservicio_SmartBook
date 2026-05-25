@@ -7,10 +7,12 @@ import org.bubbleplat.academico.entity.CursoAsignatura;
 import org.bubbleplat.academico.repository.CursoAsignaturaRepository;
 import org.bubbleplat.academico.repository.CursoRepository;
 import org.bubbleplat.academico.repository.AsignaturaRepository;
+import org.bubbleplat.academico.repository.DocenteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +21,7 @@ public class CursoAsignaturaService {
     private final CursoAsignaturaRepository cursoAsignaturaRepository;
     private final CursoRepository cursoRepository;
     private final AsignaturaRepository asignaturaRepository;
+    private final DocenteRepository docenteRepository;
 
     @Transactional(readOnly = true)
     public List<CursoAsignaturaResponse> findAll() {
@@ -96,6 +99,11 @@ public class CursoAsignaturaService {
     }
 
     private CursoAsignaturaResponse toResponse(CursoAsignatura ca) {
+        String docenteNombre = Optional.ofNullable(ca.getDocenteId())
+                .flatMap(docenteRepository::findById)
+                .map(d -> d.getNombre())
+                .orElse(null);
+        
         return new CursoAsignaturaResponse(
                 ca.getId(),
                 ca.getCurso().getId(),
@@ -103,6 +111,7 @@ public class CursoAsignaturaService {
                 ca.getAsignatura().getId(),
                 ca.getAsignatura().getNombre(),
                 ca.getDocenteId(),
+                docenteNombre,
                 ca.getSemestre()
         );
     }
